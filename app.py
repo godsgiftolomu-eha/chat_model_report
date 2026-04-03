@@ -22,18 +22,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.markdown("""
-<style>
-    .stApp { background-color: #0f172a; color: #e2e8f0; }
-    .metric-card {
-        background: #1e293b;
-        border-radius: 12px;
-        padding: 16px;
-        border: 1px solid #334155;
-    }
-    section[data-testid="stSidebar"] { background-color: #1e293b; }
-</style>
-""", unsafe_allow_html=True)
+
 
 # ============================================================
 # SIDEBAR
