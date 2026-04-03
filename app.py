@@ -140,5 +140,5 @@ if st.button("Generate Report", type="primary", width="stretch"):
 
         # Show sections in expanders
         for section_name, section_data in sections.items():
-            with st.expander(f"{section_name.replace('_', ' ').title()} ({section_data['word_count']} words, {section_data['latency_seconds']}s)"):
+            with st.expander(section_name.replace('_', ' ').title()):
                 st.write(section_data['text'])
