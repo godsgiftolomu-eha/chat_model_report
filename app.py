@@ -126,7 +126,7 @@ if st.button("Generate Report", type="primary", width="stretch"):
         # Generate PDF
         pdf_bytes = generate_pdf_report(stats, context, content_dict, report_depth, provider_name="groq")
 
-        st.success(f"Done! Total: {total_latency}s | Model: {model_used}")
+        st.success(f"Done! Total: {total_latency}s")
 
         # Download button
         safe_name = location_name.replace(' ', '_').replace(',', '')
