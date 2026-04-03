@@ -14,8 +14,5 @@ groq>=0.4.0
 fpdf2>=2.7.0
 Pillow>=9.0.0
 
-# Environment
-python-dotenv>=1.0.0
-
 # Data
 openpyxl>=3.1.0

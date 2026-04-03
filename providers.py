@@ -4,11 +4,9 @@ CHAT Model Evaluation - LLM Abstraction (Groq / Llama)
 
 import os
 import time
-from dotenv import load_dotenv
+import streamlit as st
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
-
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 
 # Provider configuration
 PROVIDERS = {
