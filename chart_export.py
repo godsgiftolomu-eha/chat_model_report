@@ -7,6 +7,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
+import re
 import tempfile
 import os
 
@@ -263,28 +264,67 @@ def _wrap_text(text, max_chars=42):
 
 
 def export_recommendations_roadmap(location_name, recommendations_text):
-    """Recommendations Roadmap timeline infographic with full text wrapping."""
+    """Recommendations Roadmap timeline infographic with full text wrapping.
+
+    Parses the AI-generated recommendations text into three time-bucketed lists.
+    The parser accepts any common bullet marker (-, *, •, ·, —) and numbered
+    items (1., 1), 1:), and also falls back to plain prose sentences that appear
+    under a category header — so that variations in LLM output still populate
+    the roadmap instead of leaving the boxes empty.
+    """
     short_items = []
     medium_items = []
     long_items = []
     current_list = None
 
-    for line in recommendations_text.split('\n'):
-        stripped = line.strip()
+    # Matches a line that starts with a bullet marker OR a number prefix.
+    # Captures the remaining text after the marker.
+    BULLET_RE = re.compile(r'^\s*(?:[-*•·—]+|\d+[.):])\s+(.+)$')
+
+    # Category header detection: the line is primarily a category label, not a
+    # recommendation itself. We check this BEFORE the bullet regex because some
+    # LLMs output headers like "- Short-Term (0-12 months):" with a dash.
+    def _category_of(lower_line):
+        if 'short-term' in lower_line or 'short term' in lower_line or '0-12' in lower_line or '0 - 12' in lower_line:
+            return 'short'
+        if 'medium-term' in lower_line or 'medium term' in lower_line or '1-3' in lower_line or '1 - 3' in lower_line:
+            return 'medium'
+        if 'long-term' in lower_line or 'long term' in lower_line or '3-5' in lower_line or '3 - 5' in lower_line:
+            return 'long'
+        return None
+
+    for raw_line in recommendations_text.split('\n'):
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        # Drop markdown emphasis that some models emit even when told not to.
+        stripped = stripped.replace('**', '').replace('__', '').strip()
         lower = stripped.lower()
-        if 'short-term' in lower or 'short term' in lower or '0-12' in lower or '0 - 12' in lower:
-            current_list = short_items
-            continue
-        elif 'medium-term' in lower or 'medium term' in lower or '1-3' in lower or '1 - 3' in lower:
-            current_list = medium_items
-            continue
-        elif 'long-term' in lower or 'long term' in lower or '3-5' in lower or '3 - 5' in lower:
-            current_list = long_items
+
+        # 1. Is this a category header? Treat short lines that name a category
+        #    as headers regardless of bullet prefix, so "- Short-Term:" is a
+        #    header, not a bullet.
+        cat = _category_of(lower)
+        if cat and len(stripped) < 60:
+            current_list = {'short': short_items, 'medium': medium_items, 'long': long_items}[cat]
             continue
 
-        if current_list is not None and stripped and stripped.startswith('-'):
-            text = stripped.lstrip('- ').strip()
-            current_list.append(text)
+        if current_list is None:
+            continue
+
+        # 2. Bullet-marker path: extract text after the marker.
+        m = BULLET_RE.match(stripped)
+        if m:
+            text = m.group(1).strip().rstrip(':').strip()
+            if text:
+                current_list.append(text)
+            continue
+
+        # 3. Fallback: plain sentence under a category header — still an item.
+        #    Guard: must be a substantive sentence (>= 15 chars) and not another
+        #    stray header we missed.
+        if len(stripped) >= 15 and not stripped.endswith(':'):
+            current_list.append(stripped.rstrip('.'))
 
     short_items = short_items[:4]
     medium_items = medium_items[:4]

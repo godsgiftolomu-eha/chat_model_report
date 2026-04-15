@@ -241,19 +241,44 @@ def generate_pdf_report(stats, context, content_dict, report_depth, provider_nam
         pdf.set_xy(18, 250)
         pdf.cell(80, 8, f'{datetime.now().strftime("%B, %Y")}')
 
-    # --- 1. EXECUTIVE SUMMARY ---
+    # Depth normalization — drives section/chart inclusion below.
+    depth_key = (report_depth or "").strip().lower()
+    is_overview = depth_key in ("short", "brief", "overview summary", "overview")
+    is_moderate = depth_key == "moderate"
+    is_comprehensive = depth_key == "comprehensive"
+
+    # --- OVERVIEW SUMMARY DEPTH: single consolidated narrative, then references, then stop. ---
+    if is_overview:
+        pdf.add_page()
+        add_section_header(pdf, 'Overview Summary')
+        add_content(pdf, content_dict.get('overview_summary', content_dict.get('executive_summary', 'No overview available.')))
+
+        add_section_header(pdf, 'References')
+        references = (
+            "1. WHO Operational Framework for Building Climate Resilient Health Systems\n"
+            "2. Facility Assessment Data (CHAT Tool, 2026)\n"
+        )
+        add_content(pdf, references)
+
+        pdf_output = pdf.output(dest='S')
+        if isinstance(pdf_output, str):
+            return pdf_output.encode('latin-1')
+        return bytes(pdf_output)
+
+    # --- 1. EXECUTIVE SUMMARY (moderate + comprehensive) ---
     pdf.add_page()
     add_section_header(pdf, 'Executive Summary')
     add_content(pdf, content_dict.get('executive_summary', 'No summary available.'))
 
-    # Key Statistics Infographic
-    key_stats_img = export_key_statistics_banner(stats, location_name)
-    if key_stats_img:
-        try:
-            safe_image(pdf, key_stats_img, x=5, w=200)
-            os.unlink(key_stats_img)
-        except Exception:
-            pass
+    # Key Statistics Infographic — comprehensive only
+    if is_comprehensive:
+        key_stats_img = export_key_statistics_banner(stats, location_name)
+        if key_stats_img:
+            try:
+                safe_image(pdf, key_stats_img, x=5, w=200)
+                os.unlink(key_stats_img)
+            except Exception:
+                pass
 
     # --- 2. INTRODUCTION ---
     add_section_header(pdf, 'Introduction')
@@ -296,86 +321,88 @@ def generate_pdf_report(stats, context, content_dict, report_depth, provider_nam
             purpose_text = purpose_text.replace(remove, '', 1).strip()
         add_content(pdf, purpose_text)
 
-    # WHO Exposure Areas Table
-    check_space(pdf, 60)
-    add_subsection_header(pdf, 'Table 1: WHO adapted exposure areas')
-    pdf.set_font(FONT_FAMILY, 'B', 8)
-    pdf.set_fill_color(*BLUE)
-    pdf.set_text_color(255, 255, 255)
-    pdf.cell(70, 8, 'Exposures', border=1, align='C', fill=True)
-    pdf.cell(120, 8, 'Subdivisions', border=1, align='C', fill=True); pdf.ln()
+    # WHO Exposure Areas Table — comprehensive only
+    if is_comprehensive:
+        check_space(pdf, 60)
+        add_subsection_header(pdf, 'Table 1: WHO adapted exposure areas')
+        pdf.set_font(FONT_FAMILY, 'B', 8)
+        pdf.set_fill_color(*BLUE)
+        pdf.set_text_color(255, 255, 255)
+        pdf.cell(70, 8, 'Exposures', border=1, align='C', fill=True)
+        pdf.cell(120, 8, 'Subdivisions', border=1, align='C', fill=True); pdf.ln()
 
-    pdf.set_font(FONT_FAMILY, '', 8)
-    pdf.set_text_color(*BODY_COLOR)
-    who_rows = [
-        ('Health Workforce', 'Human Resources; Capacity Development; Communication and Awareness Raising'),
-        ('Water Sanitation and healthcare Waste', 'Monitoring and Assessment; Risk Management; Health and Safety Regulation'),
-        ('Energy', 'Monitoring and Assessment; Risk Management; Health and Safety Regulation'),
-        ('Infrastructure, Technologies, Products and Processes', 'Adaptation of current systems and infrastructures; Promotion of new systems and technologies; Sustainability of healthcare facility operations')
-    ]
-    col1_w = 70
-    col2_w = 120
-    line_h = 4.5
-    for exp, subs in who_rows:
-        chars_per_line = 85
-        num_lines_col2 = max(1, -(-len(subs) // chars_per_line))
-        num_lines_col1 = max(1, -(-len(exp) // 48))
-        num_lines = max(num_lines_col1, num_lines_col2)
-        row_h = line_h * num_lines + 3
+        pdf.set_font(FONT_FAMILY, '', 8)
+        pdf.set_text_color(*BODY_COLOR)
+        who_rows = [
+            ('Health Workforce', 'Human Resources; Capacity Development; Communication and Awareness Raising'),
+            ('Water Sanitation and healthcare Waste', 'Monitoring and Assessment; Risk Management; Health and Safety Regulation'),
+            ('Energy', 'Monitoring and Assessment; Risk Management; Health and Safety Regulation'),
+            ('Infrastructure, Technologies, Products and Processes', 'Adaptation of current systems and infrastructures; Promotion of new systems and technologies; Sustainability of healthcare facility operations')
+        ]
+        col1_w = 70
+        col2_w = 120
+        line_h = 4.5
+        for exp, subs in who_rows:
+            chars_per_line = 85
+            num_lines_col2 = max(1, -(-len(subs) // chars_per_line))
+            num_lines_col1 = max(1, -(-len(exp) // 48))
+            num_lines = max(num_lines_col1, num_lines_col2)
+            row_h = line_h * num_lines + 3
 
-        x_start = pdf.get_x()
-        y_start = pdf.get_y()
+            x_start = pdf.get_x()
+            y_start = pdf.get_y()
 
-        pdf.rect(x_start, y_start, col1_w, row_h)
-        pdf.rect(x_start + col1_w, y_start, col2_w, row_h)
+            pdf.rect(x_start, y_start, col1_w, row_h)
+            pdf.rect(x_start + col1_w, y_start, col2_w, row_h)
 
-        pdf.set_xy(x_start + 1, y_start + 1)
-        pdf.multi_cell(col1_w - 2, line_h, sanitize_for_pdf(exp), align='L')
+            pdf.set_xy(x_start + 1, y_start + 1)
+            pdf.multi_cell(col1_w - 2, line_h, sanitize_for_pdf(exp), align='L')
 
-        pdf.set_xy(x_start + col1_w + 1, y_start + 1)
-        pdf.multi_cell(col2_w - 2, line_h, sanitize_for_pdf(subs), align='L')
+            pdf.set_xy(x_start + col1_w + 1, y_start + 1)
+            pdf.multi_cell(col2_w - 2, line_h, sanitize_for_pdf(subs), align='L')
 
-        pdf.set_xy(x_start, y_start + row_h)
+            pdf.set_xy(x_start, y_start + row_h)
 
     # --- 3. METHODOLOGY ---
     add_section_header(pdf, 'Methodology/Approach')
     add_content(pdf, content_dict.get('methodology', 'No methodology available.'))
 
-    # --- 4. FINDINGS / RESULTS ---
-    add_section_header(pdf, 'Findings / Results')
+    # --- 4. FINDINGS / RESULTS — comprehensive only (domain tables + per-domain charts) ---
+    if is_comprehensive:
+        add_section_header(pdf, 'Findings / Results')
 
-    domain_tables = stats.get('domain_tables', {})
-    for domain_key in ['Health Workforce', 'WASH', 'Energy', 'Infrastructure']:
-        domain_data = domain_tables.get(domain_key, {})
-        if not domain_data or not domain_data.get('facilities'):
-            continue
+        domain_tables = stats.get('domain_tables', {})
+        for domain_key in ['Health Workforce', 'WASH', 'Energy', 'Infrastructure']:
+            domain_data = domain_tables.get(domain_key, {})
+            if not domain_data or not domain_data.get('facilities'):
+                continue
 
-        add_domain_table(pdf, domain_key, domain_data)
+            add_domain_table(pdf, domain_key, domain_data)
 
-        chart_w = 93
-        chart_h = 60
-        if pdf.get_y() + chart_h + 10 > PAGE_H - PAGE_MARGIN:
-            pdf.add_page()
-        pdf.ln(3)
-        chart_y = pdf.get_y()
+            chart_w = 93
+            chart_h = 60
+            if pdf.get_y() + chart_h + 10 > PAGE_H - PAGE_MARGIN:
+                pdf.add_page()
+            pdf.ln(3)
+            chart_y = pdf.get_y()
 
-        avg_img = export_domain_average_chart(domain_data, domain_data['display_name'])
-        if avg_img:
-            try:
-                pdf.image(avg_img, x=5, y=chart_y, w=chart_w, h=chart_h)
-                os.unlink(avg_img)
-            except Exception:
-                pass
+            avg_img = export_domain_average_chart(domain_data, domain_data['display_name'])
+            if avg_img:
+                try:
+                    pdf.image(avg_img, x=5, y=chart_y, w=chart_w, h=chart_h)
+                    os.unlink(avg_img)
+                except Exception:
+                    pass
 
-        detail_img = export_domain_detailed_chart(domain_data, domain_data['display_name'])
-        if detail_img:
-            try:
-                pdf.image(detail_img, x=103, y=chart_y, w=chart_w, h=chart_h)
-                os.unlink(detail_img)
-            except Exception:
-                pass
+            detail_img = export_domain_detailed_chart(domain_data, domain_data['display_name'])
+            if detail_img:
+                try:
+                    pdf.image(detail_img, x=103, y=chart_y, w=chart_w, h=chart_h)
+                    os.unlink(detail_img)
+                except Exception:
+                    pass
 
-        pdf.set_y(chart_y + chart_h + 5)
+            pdf.set_y(chart_y + chart_h + 5)
 
     # --- DISCUSSION ---
     add_section_header(pdf, 'Discussion')
@@ -419,29 +446,31 @@ def generate_pdf_report(stats, context, content_dict, report_depth, provider_nam
     challenges_text = challenges_text.strip()
     add_content(pdf, challenges_text)
 
-    # Domain Radar Chart
-    domain_tables_for_radar = stats.get('domain_tables', {})
-    radar_img = export_domain_radar_chart(domain_tables_for_radar)
-    if radar_img:
-        try:
-            safe_image(pdf, radar_img, x=25, w=160)
-            os.unlink(radar_img)
-        except Exception:
-            pass
+    # Domain Radar Chart — comprehensive only
+    if is_comprehensive:
+        domain_tables_for_radar = stats.get('domain_tables', {})
+        radar_img = export_domain_radar_chart(domain_tables_for_radar)
+        if radar_img:
+            try:
+                safe_image(pdf, radar_img, x=25, w=160)
+                os.unlink(radar_img)
+            except Exception:
+                pass
 
     # --- RECOMMENDATIONS ---
     add_section_header(pdf, 'Recommendations')
     recommendations_text = content_dict.get('recommendations', 'No recommendations available.')
     add_content(pdf, recommendations_text)
 
-    # Recommendations Roadmap
-    roadmap_img = export_recommendations_roadmap(location_name, recommendations_text)
-    if roadmap_img:
-        try:
-            safe_image(pdf, roadmap_img, x=5, w=200)
-            os.unlink(roadmap_img)
-        except Exception:
-            pass
+    # Recommendations Roadmap — comprehensive only
+    if is_comprehensive:
+        roadmap_img = export_recommendations_roadmap(location_name, recommendations_text)
+        if roadmap_img:
+            try:
+                safe_image(pdf, roadmap_img, x=5, w=200)
+                os.unlink(roadmap_img)
+            except Exception:
+                pass
 
     # --- CONCLUSION ---
     add_section_header(pdf, 'Conclusion')
@@ -458,36 +487,37 @@ def generate_pdf_report(stats, context, content_dict, report_depth, provider_nam
     )
     add_content(pdf, references)
 
-    # --- FACILITY LIST ---
-    facility_list_table = stats.get('facility_list_table', [])
-    if facility_list_table:
-        add_section_header(pdf, 'List of Facilities Assessed')
+    # --- FACILITY LIST — comprehensive only ---
+    if is_comprehensive:
+        facility_list_table = stats.get('facility_list_table', [])
+        if facility_list_table:
+            add_section_header(pdf, 'List of Facilities Assessed')
 
-        pdf.set_font(FONT_FAMILY, 'B', 8)
-        pdf.set_fill_color(*BLUE)
-        pdf.set_text_color(255, 255, 255)
-        pdf.cell(10, 8, '#', border=1, align='C', fill=True)
-        pdf.cell(100, 8, 'PHCs', border=1, align='C', fill=True)
-        pdf.cell(50, 8, 'LGAs', border=1, align='C', fill=True); pdf.ln()
+            pdf.set_font(FONT_FAMILY, 'B', 8)
+            pdf.set_fill_color(*BLUE)
+            pdf.set_text_color(255, 255, 255)
+            pdf.cell(10, 8, '#', border=1, align='C', fill=True)
+            pdf.cell(100, 8, 'PHCs', border=1, align='C', fill=True)
+            pdf.cell(50, 8, 'LGAs', border=1, align='C', fill=True); pdf.ln()
 
-        pdf.set_font(FONT_FAMILY, '', 8)
-        pdf.set_text_color(*BODY_COLOR)
-        for idx, fac in enumerate(facility_list_table, 1):
-            if pdf.get_y() > 270:
-                pdf.add_page()
-            pdf.cell(10, 7, str(idx), border=1, align='C')
-            pdf.cell(100, 7, sanitize_for_pdf(fac.get('name', '')), border=1)
-            pdf.cell(50, 7, sanitize_for_pdf(fac.get('lga', '')), border=1); pdf.ln()
+            pdf.set_font(FONT_FAMILY, '', 8)
+            pdf.set_text_color(*BODY_COLOR)
+            for idx, fac in enumerate(facility_list_table, 1):
+                if pdf.get_y() > 270:
+                    pdf.add_page()
+                pdf.cell(10, 7, str(idx), border=1, align='C')
+                pdf.cell(100, 7, sanitize_for_pdf(fac.get('name', '')), border=1)
+                pdf.cell(50, 7, sanitize_for_pdf(fac.get('lga', '')), border=1); pdf.ln()
 
-    # Facility Vulnerability Heatmap
-    heatmap_domain_tables = stats.get('domain_tables', {})
-    heatmap_img = export_facility_heatmap(heatmap_domain_tables)
-    if heatmap_img:
-        try:
-            safe_image(pdf, heatmap_img, x=5, w=200)
-            os.unlink(heatmap_img)
-        except Exception:
-            pass
+        # Facility Vulnerability Heatmap — comprehensive only
+        heatmap_domain_tables = stats.get('domain_tables', {})
+        heatmap_img = export_facility_heatmap(heatmap_domain_tables)
+        if heatmap_img:
+            try:
+                safe_image(pdf, heatmap_img, x=5, w=200)
+                os.unlink(heatmap_img)
+            except Exception:
+                pass
 
     pdf_output = pdf.output(dest='S')
     if isinstance(pdf_output, str):

@@ -5,7 +5,12 @@ All 8 prompt functions copied from app/app.py, wired to providers.call_llm().
 
 import json
 from collections import Counter
-from providers import call_llm, get_model_for_depth
+from providers import (
+    call_llm,
+    get_model_for_depth,
+    get_length_instruction,
+    get_sections_for_depth,
+)
 
 
 def clean_ai_output(text):
@@ -121,7 +126,9 @@ def get_ai_executive_summary(stats, context, report_depth, provider):
 
     WRITING STYLE: Vary your sentence structure and word choice. Do NOT use the same opening phrases across reports.
     Avoid formulaic language. Each report should read uniquely while maintaining professional tone.
-    Keep evidence-based. Limit to 300 words. Do NOT use markdown formatting.
+    Keep evidence-based. Do NOT use markdown formatting.
+
+    {get_length_instruction(report_depth, "executive_summary")}
     """
     messages = [{"role": "user", "content": prompt}]
     return _call_and_clean(provider, messages, report_depth, 1024, temperature=0.8)
@@ -165,7 +172,9 @@ Write the introduction covering these points:
 
 CRITICAL: Your introduction must reflect the ACTUAL severity level of {context['location_name']}. If {stats['high_pct']}% of facilities are highly vulnerable, the tone should convey urgency. If vulnerability is moderate, reflect that. The writing must match the data.
 
-WRITING STYLE: Use varied sentence structures. Each report should read distinctly. Do not use any markdown formatting. Use plain text only."""
+WRITING STYLE: Use varied sentence structures. Each report should read distinctly. Do not use any markdown formatting. Use plain text only.
+
+{get_length_instruction(report_depth, "introduction")}"""
     messages = [{"role": "user", "content": prompt}]
     return _call_and_clean(provider, messages, report_depth, 1500, temperature=0.75)
 
@@ -200,6 +209,8 @@ def get_ai_methodology(stats, context, report_depth, provider):
 
     Write as flowing prose paragraphs, NOT bullet points. Professional tone.
     Do NOT use markdown formatting.
+
+    {get_length_instruction(report_depth, "methodology")}
     """
     messages = [{"role": "user", "content": prompt}]
     return _call_and_clean(provider, messages, report_depth, 1200, temperature=0.75)
@@ -259,7 +270,9 @@ RULES:
 - Base your discussion STRICTLY on the data provided above
 - Vary your analytical language and sentence structure. Avoid formulaic phrasing that reads the same across reports.
 - Use different ways to present the same types of findings (e.g., don't always start with "The [domain] domain shows...")
-- Do not use any markdown formatting. Use plain text only."""
+- Do not use any markdown formatting. Use plain text only.
+
+{get_length_instruction(report_depth, "discussion")}"""
     messages = [{"role": "user", "content": prompt}]
     return _call_and_clean(provider, messages, report_depth, 2048, temperature=0.8)
 
@@ -298,12 +311,12 @@ def get_ai_challenges(stats, context, report_depth, provider):
     Start directly with the content.
 
     Structure:
-    Start with "Key implementation challenges identified include:" then list 4 bullet points.
+    Start with "Key implementation challenges identified include:" then list the challenges as bullet points.
     The challenges MUST be specific to the {context['location_name']} assessment data above. Reference specific vulnerability scores,
     the most vulnerable domains, and the percentage of high-vulnerability facilities. Do NOT use generic challenges — tailor each
     point to the actual findings from this assessment.
 
-    Then write "Key lessons learned from the project include:" then list 3 bullet points.
+    Then write "Key lessons learned from the project include:" then list the lessons as bullet points.
     The lessons MUST reflect what the data reveals about {context['location_name']}. Reference which domains showed the
     biggest gaps, what the vulnerability distribution tells us, and how the CHAT tool performed in this specific context.
 
@@ -312,6 +325,8 @@ def get_ai_challenges(stats, context, report_depth, provider):
     WRITING STYLE: Phrase each challenge and lesson differently from other reports. Use varied vocabulary and sentence patterns.
 
     Write concisely. Use plain text, no markdown formatting. Do NOT add any section titles or subtitles.
+
+    {get_length_instruction(report_depth, "challenges")}
     """
     messages = [{"role": "user", "content": prompt}]
     return _call_and_clean(provider, messages, report_depth, 1024, temperature=0.75)
@@ -352,29 +367,45 @@ def get_ai_recommendations(stats, context, report_depth, provider):
     - Base every recommendation on the actual vulnerability data above. Do NOT introduce external data or fabricate statistics.
     - Prioritize domains with scores closest to 1.0 (highest vulnerability) in the short-term recommendations.
 
-    STRUCTURE exactly as follows with THREE time categories and 4 bullet points under each:
+    STRUCTURE: THREE time categories (Short-Term, Medium-Term, Long-Term). The exact number of bullets per
+    category is dictated by the LENGTH REQUIREMENT below — pick the most relevant/highest-priority recommendations
+    that fit the count. Use the items below as examples of the TYPES of recommendations expected; adapt them
+    to the data.
 
-    Short-Term (0-12 months):
+    CRITICAL FORMAT RULES (the roadmap infographic parser depends on these):
+    - Each category MUST appear on its own line as one of exactly these headers:
+          Short-Term (0-12 months)
+          Medium-Term (1-3 years)
+          Long-Term (3-5 years)
+    - Under each header, every recommendation MUST begin with a hyphen followed by a space: "- ".
+    - Do NOT use asterisks, bullets (\u2022), numbers (1., 2.), or any other marker.
+    - Keep each bullet to ONE line of concrete, actionable text (aim for 8-18 words).
+    - Do NOT repeat the category header inside the bullets.
+    - Leave one blank line between categories.
+
+    Short-Term (0-12 months) examples:
     - Conduct climate risk awareness training for health workers
     - Strengthen WASH monitoring and safety protocols
     - Institutionalize routine CHAT assessments
     - Improve facility-level documentation and preparedness planning
 
-    Medium-Term (1-3 years):
+    Medium-Term (1-3 years) examples:
     - Invest in reliable and sustainable energy systems (e.g., solar hybrid systems)
     - Upgrade facility infrastructure to withstand flooding and heat
     - Develop facility-level climate emergency preparedness plans
     - Integrate CHAT data into {context['location_name']} health planning systems
 
-    Long-Term (3-5 years):
+    Long-Term (3-5 years) examples:
     - Scale CHAT across all LGAs in {context['location_name']}
     - Develop climate-resilient infrastructure standards for PHCs
     - Integrate climate resilience indicators into national health system monitoring frameworks
     - Strengthen collaboration between health, environment, and disaster management agencies
 
-    Tailor the above template to specifically reflect the vulnerability scores and data provided. Use plain text, no markdown. Keep each bullet actionable and specific to {context['location_name']}.
+    Tailor the above to specifically reflect the vulnerability scores and data provided. Use plain text, no markdown. Keep each bullet actionable and specific to {context['location_name']}.
 
     WRITING STYLE: Word each recommendation differently. Avoid using the exact same phrasing across different state reports. Vary how you reference scores and data.
+
+    {get_length_instruction(report_depth, "recommendations")}
     """
     messages = [{"role": "user", "content": prompt}]
     return _call_and_clean(provider, messages, report_depth, 1500, temperature=0.8)
@@ -425,6 +456,8 @@ def get_ai_conclusion(stats, context, report_depth, provider):
     WRITING STYLE: Write a unique conclusion. Vary your opening — do NOT start with "The deployment of CHAT..." every time.
 
     Write as 2-3 cohesive paragraphs. Professional tone. No markdown formatting.
+
+    {get_length_instruction(report_depth, "conclusion")}
     """
     messages = [{"role": "user", "content": prompt}]
     return _call_and_clean(provider, messages, report_depth, 800, temperature=0.8)
@@ -469,24 +502,108 @@ def get_ai_facility_assessment(facility_data, provider):
     return _call_and_clean(provider, messages, "comprehensive", 800, temperature=0.75)
 
 
+def get_ai_overview_summary(stats, context, report_depth, provider):
+    """Generate a single consolidated overview summary for Overview-depth reports.
+
+    These reports skip the multi-section structure and render one short
+    narrative that stands alone — covering location, scope, headline
+    vulnerability findings, most/least vulnerable domain, and the single
+    highest-priority recommendation.
+    """
+    domain_lines = ""
+    most_vuln_name, most_vuln_score = None, None
+    least_vuln_name, least_vuln_score = None, None
+    if 'domain_tables' in stats:
+        domain_scores = []
+        for _, domain_data in stats['domain_tables'].items():
+            avg = domain_data.get('domain_avg', 'N/A')
+            domain_lines += f"- {domain_data['display_name']}: {avg}/3.0\n"
+            if avg not in ('N/A', None):
+                try:
+                    domain_scores.append((domain_data['display_name'], float(avg)))
+                except (TypeError, ValueError):
+                    pass
+        if domain_scores:
+            most_vuln_name, most_vuln_score = min(domain_scores, key=lambda x: x[1])
+            least_vuln_name, least_vuln_score = max(domain_scores, key=lambda x: x[1])
+
+    prompt = f"""Write an OVERVIEW SUMMARY for the CHAT Climate Health Vulnerability Assessment for {context['location_name']}.
+
+This overview summary is the ENTIRE report body — no other sections, no tables, no charts will follow it.
+It must stand alone as a complete, publication-ready summary — a self-contained overview written as
+connected prose for a professional reader.
+
+IMPORTANT - USE THESE EXACT ACRONYMS AND DEFINITIONS (do NOT invent alternative names):
+- CHAT = Climate Health Vulnerability Assessment Tool (CHAT)
+- WASH = Water, Sanitation and Healthcare Waste (WASH)
+- PHC = Primary Health Care (PHC)
+- WHO = World Health Organization (WHO)
+- eHA = eHealth Africa (eHA)
+
+KEY DATA:
+- Location: {context['location_name']} ({context['location_type']})
+- Facilities assessed: {stats['facilities']} across {stats['lgas']} LGAs
+- Total assessments: {stats['total']:,}
+- Overall vulnerability index: {stats['avg_vuln']}/3.0 (1=High Vulnerability, 3=Low Vulnerability)
+- High vulnerability: {stats['high_pct']}% | Medium: {stats['medium_pct']}% | Low: {stats['low_pct']}%
+
+DOMAIN AVERAGES:
+{domain_lines}
+Most vulnerable domain: {most_vuln_name} ({most_vuln_score}/3.0)
+Least vulnerable domain: {least_vuln_name} ({least_vuln_score}/3.0)
+
+STRUCTURE — write as ONE cohesive paragraph that flows through:
+1. A single opening sentence naming the location, the tool (CHAT), and the scope ({stats['facilities']} PHCs across {stats['lgas']} LGAs).
+2. The headline vulnerability finding — state the index {stats['avg_vuln']}/3.0 and interpret it (critically / moderately / relatively resilient).
+3. The most vulnerable domain ({most_vuln_name}) and what it means, contrasted briefly with the least vulnerable ({least_vuln_name}).
+4. A single highest-priority recommendation specific to {context['location_name']}'s data.
+5. A one-line closing on CHAT's value.
+
+RULES:
+- ONE paragraph only. No bullet points, no subheadings, no section titles.
+- Every claim must trace back to the data above. Do NOT fabricate.
+- No markdown formatting. Plain prose only.
+- Do NOT refer to "the chart" or "the table" — nothing visual will accompany this text.
+
+{get_length_instruction(report_depth, "overview_summary")}"""
+
+    messages = [{"role": "user", "content": prompt}]
+    return _call_and_clean(provider, messages, report_depth, 600, temperature=0.75)
+
+
+# Map of section key -> prompt function. Single source of truth for what
+# function produces which section. generate_all_sections picks from here
+# based on the depth.
+_SECTION_FUNCTIONS = {
+    "overview_summary":  get_ai_overview_summary,
+    "executive_summary": get_ai_executive_summary,
+    "introduction":      get_ai_introduction,
+    "methodology":       get_ai_methodology,
+    "discussion":        get_ai_domain_discussion,
+    "challenges":        get_ai_challenges,
+    "recommendations":   get_ai_recommendations,
+    "conclusion":        get_ai_conclusion,
+}
+
+
 def generate_all_sections(stats, context, report_depth, provider, progress_callback=None):
     """
-    Generate all 7 report sections with a given provider.
+    Generate the report sections appropriate for the given depth.
+    - Overview Summary: one consolidated standalone narrative only.
+    - Moderate: seven narrative sections (no tables/charts will accompany them).
+    - Comprehensive: seven narrative sections (paired with tables/charts in PDF).
+
     Returns dict with section texts and metadata (model, latency, word_count per section).
     """
     sections = {}
-    section_fns = [
-        ("executive_summary", get_ai_executive_summary),
-        ("introduction", get_ai_introduction),
-        ("methodology", get_ai_methodology),
-        ("discussion", get_ai_domain_discussion),
-        ("challenges", get_ai_challenges),
-        ("recommendations", get_ai_recommendations),
-        ("conclusion", get_ai_conclusion),
-    ]
+    section_keys = get_sections_for_depth(report_depth)
+    total = len(section_keys)
 
-    total = len(section_fns)
-    for i, (name, fn) in enumerate(section_fns):
+    for i, name in enumerate(section_keys):
+        fn = _SECTION_FUNCTIONS.get(name)
+        if fn is None:
+            continue
+
         if progress_callback:
             progress_callback(i / total, f"Generating {name.replace('_', ' ').title()}...")
 

@@ -45,8 +45,11 @@ with st.sidebar:
     st.divider()
 
     # Report Depth
+    # Comprehensive    = full report with tables, charts, and all narrative sections.
+    # Moderate         = narrative-only report (no tables/charts/roadmap).
+    # Overview Summary = single consolidated narrative, one paragraph.
     st.subheader("Report Depth")
-    report_depth = st.radio("Depth", ["Comprehensive", "Moderate", "Short"], index=0)
+    report_depth = st.radio("Depth", ["Comprehensive", "Moderate", "Overview Summary"], index=0)
 
 # ============================================================
 # PREPARE DATA
@@ -117,9 +120,11 @@ if st.button("Generate Report", type="primary", width="stretch"):
 
         st.success(f"Done! Total: {total_latency}s")
 
-        # Download button
+        # Download button — filename includes depth so different versions
+        # of the same location's report don't overwrite each other.
         safe_name = location_name.replace(' ', '_').replace(',', '')
-        pdf_filename = f"CHAT_Report_{safe_name}.pdf"
+        safe_depth = report_depth.replace(' ', '_')
+        pdf_filename = f"CHAT_Report_{safe_name}_{safe_depth}.pdf"
         st.download_button(
             label="Download PDF",
             data=pdf_bytes,
